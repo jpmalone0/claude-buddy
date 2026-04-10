@@ -15,10 +15,14 @@ PANE_W="${POPUP_INNER_W:-$(tput cols 2>/dev/null || echo 24)}"
 PANE_H="${POPUP_INNER_H:-$(tput lines 2>/dev/null || echo 14)}"
 
 BUDDY_STATE_DIR="${BUDDY_DIR:-$HOME/.claude-buddy}"
+# Session ID from env (set by popup-manager via -e or env file)
+_SID="${BUDDY_SID:-${CC_PANE#%}}"
+_SID="${_SID:-default}"
+
 STATE="$BUDDY_STATE_DIR/status.json"
 COMPANION="$BUDDY_STATE_DIR/companion.json"
-REACTION_FILE="$BUDDY_STATE_DIR/reaction.json"
-RESIZE_FLAG="$BUDDY_STATE_DIR/popup-resize"
+REACTION_FILE="$BUDDY_STATE_DIR/reaction.$_SID.json"
+RESIZE_FLAG="$BUDDY_STATE_DIR/popup-resize.$_SID"
 REACTION_TTL=20  # seconds
 CONFIG_FILE="$BUDDY_STATE_DIR/config.json"
 

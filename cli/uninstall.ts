@@ -2,7 +2,7 @@
  * claude-buddy uninstall — remove all integrations
  */
 
-import { readFileSync, writeFileSync, existsSync, rmSync } from "fs";
+import { readFileSync, writeFileSync, existsSync, rmSync, readdirSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
 
@@ -20,24 +20,29 @@ const STATE_DIR = join(homedir(), ".claude-buddy");
 
 console.log("\nclaude-buddy uninstall\n");
 
-// Stop popup reopen loop and close any running popup
+// Stop all popup reopen loops and close any running popup
 try {
-  const pidFile = join(STATE_DIR, "popup-reopen-pid");
-  const stopFlag = join(STATE_DIR, "popup-stop");
-  // Signal the reopen loop to stop
-  writeFileSync(stopFlag, "");
+  if (existsSync(STATE_DIR)) {
+    // Kill all session popup loops (popup-reopen-pid.*)
+    for (const f of readdirSync(STATE_DIR).filter(f => f.startsWith("popup-reopen-pid."))) {
+      const pidPath = join(STATE_DIR, f);
+      const pid = parseInt(readFileSync(pidPath, "utf8").trim(), 10);
+      if (pid > 0) { try { process.kill(pid); } catch { /* already dead */ } }
+      rmSync(pidPath, { force: true });
+    }
+    // Clean up all session-scoped files
+    const patterns = ["popup-stop.", "popup-resize.", "popup-env.", "popup-scroll.",
+                      "reaction.", ".last_reaction.", ".last_comment."];
+    for (const f of readdirSync(STATE_DIR)) {
+      if (patterns.some(p => f.startsWith(p))) {
+        rmSync(join(STATE_DIR, f), { force: true });
+      }
+    }
+  }
   // Close any open popup
   if (process.env.TMUX) {
     const { execSync } = await import("child_process");
     execSync("tmux display-popup -C 2>/dev/null", { stdio: "ignore" });
-  }
-  // Kill the reopen loop process
-  if (existsSync(pidFile)) {
-    const pid = parseInt(readFileSync(pidFile, "utf8").trim(), 10);
-    if (pid > 0) {
-      try { process.kill(pid); } catch { /* already dead */ }
-    }
-    rmSync(pidFile, { force: true });
   }
   ok("Popup stopped");
 } catch { /* not in tmux or no popup */ }

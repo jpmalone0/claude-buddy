@@ -17,8 +17,13 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 BUDDY_DIR="$HOME/.claude-buddy"
-STOP_FLAG="$BUDDY_DIR/popup-stop"
-REOPEN_PID_FILE="$BUDDY_DIR/popup-reopen-pid"
+
+# Session ID: sanitized tmux pane number, or "default" outside tmux
+SID="${TMUX_PANE#%}"
+SID="${SID:-default}"
+
+STOP_FLAG="$BUDDY_DIR/popup-stop.$SID"
+REOPEN_PID_FILE="$BUDDY_DIR/popup-reopen-pid.$SID"
 STATE_FILE="$BUDDY_DIR/status.json"
 
 POPUP_W=12       # minimum / fallback
@@ -26,8 +31,8 @@ ART_W=12         # updated dynamically by compute_art_width
 BUBBLE_EXTRA=3 # border top + border bottom + connector line
 BORDER_EXTRA=0 # +2 on tmux < 3.3 (popup has a border)
 REACTION_TTL=20 # seconds
-REACTION_FILE="$BUDDY_DIR/reaction.json"
-RESIZE_FLAG="$BUDDY_DIR/popup-resize"
+REACTION_FILE="$BUDDY_DIR/reaction.$SID.json"
+RESIZE_FLAG="$BUDDY_DIR/popup-resize.$SID"
 CONFIG_FILE="$BUDDY_DIR/config.json"
 LEFT_BUBBLE_W=22 # bubble box width in left mode (including frame chars)
 
@@ -178,8 +183,7 @@ start_popup() {
   is_tmux || { echo "Not in tmux" >&2; return 1; }
   tmux_version_ok || { echo "tmux >= 3.2 required for popup" >&2; return 1; }
 
-  # Kill any existing reopen loop (stale from a previous CC session).
-  # SessionStart fires once per session, so any running loop is from an old session.
+  # Kill stale reopen loop for THIS session (e.g., CC restarted in same pane)
   if [ -f "$REOPEN_PID_FILE" ]; then
     local old_pid
     old_pid=$(cat "$REOPEN_PID_FILE" 2>/dev/null)
@@ -190,6 +194,21 @@ start_popup() {
     tmux display-popup -C 2>/dev/null || true
     sleep 0.2
   fi
+
+  # Clean up orphaned per-session files (from crashed sessions)
+  for pidfile in "$BUDDY_DIR"/popup-reopen-pid.*; do
+    [ -f "$pidfile" ] || continue
+    local orphan_sid="${pidfile##*.}"
+    local orphan_pane="%${orphan_sid}"
+    if ! cc_pane_alive "$orphan_pane"; then
+      local orphan_pid
+      orphan_pid=$(cat "$pidfile" 2>/dev/null)
+      [ -n "$orphan_pid" ] && kill "$orphan_pid" 2>/dev/null || true
+      rm -f "$pidfile" "$BUDDY_DIR/popup-stop.$orphan_sid" "$BUDDY_DIR/popup-resize.$orphan_sid"
+      rm -f "$BUDDY_DIR/popup-env.$orphan_sid" "$BUDDY_DIR/popup-scroll.$orphan_sid"
+      rm -f "$BUDDY_DIR/reaction.$orphan_sid.json" "$BUDDY_DIR/.last_reaction.$orphan_sid" "$BUDDY_DIR/.last_comment.$orphan_sid"
+    fi
+  done
 
   mkdir -p "$BUDDY_DIR"
   rm -f "$STOP_FLAG" "$RESIZE_FLAG"
@@ -232,7 +251,7 @@ start_popup() {
         th=$(tmux display-message -p '#{window_height}' 2>/dev/null || echo 24)
         popup_args+=(-B -s 'bg=default')
         popup_args+=(-x $(( tw - COMPUTED_W )) -y $(( th )))
-        popup_args+=(-e "CC_PANE=$cc_pane" -e "BUDDY_DIR=$BUDDY_DIR")
+        popup_args+=(-e "CC_PANE=$cc_pane" -e "BUDDY_DIR=$BUDDY_DIR" -e "BUDDY_SID=$SID")
         popup_args+=(-e "POPUP_INNER_W=$COMPUTED_W" -e "POPUP_INNER_H=$COMPUTED_H")
         popup_args+=(-e "POPUP_ART_W=$ART_W")
       else
@@ -245,9 +264,10 @@ start_popup() {
         local inner_w=$(( COMPUTED_W - 2 ))
         local inner_h=$(( COMPUTED_H - 2 ))
         # Write env vars to file (tmux 3.2-3.3 lack -e flag)
-        cat > "$BUDDY_DIR/popup-env" <<ENVEOF
+        cat > "$BUDDY_DIR/popup-env.$SID" <<ENVEOF
 CC_PANE=$cc_pane
 BUDDY_DIR=$BUDDY_DIR
+BUDDY_SID=$SID
 POPUP_INNER_W=$inner_w
 POPUP_INNER_H=$inner_h
 POPUP_ART_W=$ART_W
@@ -260,7 +280,7 @@ ENVEOF
         "${popup_args[@]}" \
         -w "$COMPUTED_W" -h "$COMPUTED_H" \
         -E \
-        "$SCRIPT_DIR/buddy-popup.sh" \
+        "$SCRIPT_DIR/buddy-popup.sh" "$SID" \
         2>/dev/null || true
 
       # Popup closed. Check why.
@@ -268,8 +288,8 @@ ENVEOF
       cc_pane_alive "$cc_pane" || break
 
       # Scroll flag = F12 pressed, enter copy-mode and wait
-      if [ -f "$BUDDY_DIR/popup-scroll" ]; then
-        rm -f "$BUDDY_DIR/popup-scroll"
+      if [ -f "$BUDDY_DIR/popup-scroll.$SID" ]; then
+        rm -f "$BUDDY_DIR/popup-scroll.$SID"
         tmux copy-mode -t "$cc_pane" 2>/dev/null || true
         # Wait until copy-mode ends before reopening popup
         while tmux display-message -t "$cc_pane" -p '#{pane_in_mode}' 2>/dev/null | grep -q '^1$'; do
@@ -309,6 +329,10 @@ stop_popup() {
     kill "$pid" 2>/dev/null || true
     rm -f "$REOPEN_PID_FILE"
   fi
+  # Clean up per-session files
+  rm -f "$BUDDY_DIR/popup-stop.$SID" "$BUDDY_DIR/popup-resize.$SID"
+  rm -f "$BUDDY_DIR/popup-env.$SID" "$BUDDY_DIR/popup-scroll.$SID"
+  rm -f "$BUDDY_DIR/reaction.$SID.json" "$BUDDY_DIR/.last_reaction.$SID" "$BUDDY_DIR/.last_comment.$SID"
 }
 
 # ─── Status ──────────────────────────────────────────────────────────────────

@@ -4,9 +4,12 @@
 # Writes reaction to ~/.claude-buddy/reaction.json for the status line
 
 STATE_DIR="$HOME/.claude-buddy"
-REACTION_FILE="$STATE_DIR/reaction.json"
+# Session ID: sanitized tmux pane number, or "default" outside tmux
+SID="${TMUX_PANE#%}"
+SID="${SID:-default}"
+REACTION_FILE="$STATE_DIR/reaction.$SID.json"
 COMPANION_FILE="$STATE_DIR/companion.json"
-COOLDOWN_FILE="$STATE_DIR/.last_reaction"
+COOLDOWN_FILE="$STATE_DIR/.last_reaction.$SID"
 CONFIG_FILE="$STATE_DIR/config.json"
 
 # Exit if no companion

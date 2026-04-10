@@ -11,6 +11,9 @@
 
 STATE="$HOME/.claude-buddy/status.json"
 COMPANION="$HOME/.claude-buddy/companion.json"
+# Session ID: sanitized tmux pane number, or "default" outside tmux
+SID="${TMUX_PANE#%}"
+SID="${SID:-default}"
 
 [ -f "$STATE" ] || exit 0
 [ -f "$COMPANION" ] || exit 0
@@ -209,7 +212,7 @@ esac
 
 # ─── Reaction bubble (with TTL check) ────────────────────────────────────────
 BUBBLE=""
-REACTION_FILE="$HOME/.claude-buddy/reaction.json"
+REACTION_FILE="$HOME/.claude-buddy/reaction.$SID.json"
 if [ -n "$REACTION" ] && [ "$REACTION" != "null" ] && [ "$REACTION" != "" ]; then
     # Only show if reaction is fresh (< 20s old)
     FRESH=0

@@ -9,8 +9,18 @@ import type { Companion, BuddyBones } from "./engine.ts";
 
 const STATE_DIR = join(homedir(), ".claude-buddy");
 const COMPANION_FILE = join(STATE_DIR, "companion.json");
-const REACTION_FILE = join(STATE_DIR, "reaction.json");
 const CONFIG_FILE = join(STATE_DIR, "config.json");
+
+// Session ID: sanitized tmux pane number, or "default" outside tmux
+function sessionId(): string {
+  const pane = process.env.TMUX_PANE;
+  if (!pane) return "default";
+  return pane.replace(/^%/, "");
+}
+
+function reactionFile(): string {
+  return join(STATE_DIR, `reaction.${sessionId()}.json`);
+}
 
 function ensureDir(): void {
   if (!existsSync(STATE_DIR)) mkdirSync(STATE_DIR, { recursive: true });
@@ -48,7 +58,7 @@ export interface ReactionState {
 
 export function loadReaction(): ReactionState | null {
   try {
-    const data: ReactionState = JSON.parse(readFileSync(REACTION_FILE, "utf8"));
+    const data: ReactionState = JSON.parse(readFileSync(reactionFile(), "utf8"));
     // Reactions expire after 20 seconds (matches shell display TTL)
     if (Date.now() - data.timestamp > 20_000) return null;
     return data;
@@ -60,7 +70,7 @@ export function loadReaction(): ReactionState | null {
 export function saveReaction(reaction: string, reason: string): void {
   ensureDir();
   const state: ReactionState = { reaction, timestamp: Date.now(), reason };
-  writeFileSync(REACTION_FILE, JSON.stringify(state));
+  writeFileSync(reactionFile(), JSON.stringify(state));
 }
 
 // ─── Identity resolution ────────────────────────────────────────────────────

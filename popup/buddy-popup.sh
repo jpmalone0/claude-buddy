@@ -11,15 +11,20 @@
 #   - Dynamic resizing on reopen
 #
 # Env vars (set by popup-manager.sh via -e):
-#   CC_PANE   -- tmux pane ID for Claude Code (e.g. %0)
-#   BUDDY_DIR -- ~/.claude-buddy
+#   CC_PANE    -- tmux pane ID for Claude Code (e.g. %0)
+#   BUDDY_DIR  -- ~/.claude-buddy
+#   BUDDY_SID  -- session ID (sanitized pane number, e.g. "0")
+# Args: $1 = SID (fallback for tmux < 3.4 without -e support)
 
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-# On tmux 3.2, env vars are passed via file (no -e flag support)
-ENV_FILE="${HOME}/.claude-buddy/popup-env"
+# Session ID: from env (tmux 3.4+), $1 arg, or "default"
+BUDDY_SID="${BUDDY_SID:-${1:-default}}"
+
+# On tmux 3.2-3.3, env vars are passed via file (no -e flag support)
+ENV_FILE="${HOME}/.claude-buddy/popup-env.$BUDDY_SID"
 if [ -z "${CC_PANE:-}" ] && [ -f "$ENV_FILE" ]; then
   . "$ENV_FILE"
 fi
@@ -76,7 +81,8 @@ exec perl -e '
     # F12 (\e[24~) = close popup and enter scroll mode
     if ($buf =~ /\e\[24~/) {
       my $buddy_dir = $ENV{BUDDY_DIR} || "$ENV{HOME}/.claude-buddy";
-      open(my $fh, ">", "$buddy_dir/popup-scroll");
+      my $sid = $ENV{BUDDY_SID} || "default";
+      open(my $fh, ">", "$buddy_dir/popup-scroll.$sid");
       close($fh) if $fh;
       exit 0;
     }

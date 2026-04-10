@@ -6,8 +6,11 @@
 # The HTML comment is invisible in rendered markdown output.
 
 STATE_DIR="$HOME/.claude-buddy"
+# Session ID: sanitized tmux pane number, or "default" outside tmux
+SID="${TMUX_PANE#%}"
+SID="${SID:-default}"
 STATUS_FILE="$STATE_DIR/status.json"
-COOLDOWN_FILE="$STATE_DIR/.last_comment"
+COOLDOWN_FILE="$STATE_DIR/.last_comment.$SID"
 CONFIG_FILE="$STATE_DIR/config.json"
 
 [ -f "$STATUS_FILE" ] || exit 0
@@ -46,6 +49,6 @@ jq --arg r "$COMMENT" '.reaction = $r' "$STATUS_FILE" > "$TMP" 2>/dev/null && mv
 # Also write reaction file (use jq for safe JSON encoding)
 jq -n --arg r "$COMMENT" --arg ts "$(date +%s)000" \
   '{reaction: $r, timestamp: ($ts | tonumber), reason: "turn"}' \
-  > "$STATE_DIR/reaction.json"
+  > "$STATE_DIR/reaction.$SID.json"
 
 exit 0
