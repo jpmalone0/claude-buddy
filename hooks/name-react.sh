@@ -89,6 +89,70 @@ case "$SPECIES" in
       "*oozes toward you*"
       "*wobbles excitedly*"
     ) ;;
+  turtle)
+    REACTIONS=(
+      "*slowly extends neck*"
+      "...you called?"
+      "*ancient eyes open*"
+      "*shell creaks thoughtfully*"
+      "*blinks once, patiently*"
+    ) ;;
+  goose)
+    REACTIONS=(
+      "HONK."
+      "*necks aggressively*"
+      "*wing flap*"
+      "*honks in recognition*"
+    ) ;;
+  octopus)
+    REACTIONS=(
+      "*eight eyes open*"
+      "*curls an arm toward you*"
+      "*changes color curiously*"
+      "...yes, friend?"
+    ) ;;
+  penguin)
+    REACTIONS=(
+      "*adjusts tie*"
+      "*dignified waddle*"
+      "*bows slightly*"
+      "...yes, quite?"
+    ) ;;
+  snail)
+    REACTIONS=(
+      "*slow head extension*"
+      "...mmm?"
+      "*trails slowly toward you*"
+      "*antenna twitches*"
+    ) ;;
+  cactus)
+    REACTIONS=(
+      "*stands silent*"
+      "...hm."
+      "*spine twitches*"
+      "*slowly rotates*"
+    ) ;;
+  rabbit)
+    REACTIONS=(
+      "*ears perk up*"
+      "*nose twitches*"
+      "yes?"
+      "*hops closer*"
+    ) ;;
+  mushroom)
+    REACTIONS=(
+      "*releases a tiny spore*"
+      "*cap tilts*"
+      "*stands mysterious*"
+      "...yes?"
+    ) ;;
+  chonk)
+    REACTIONS=(
+      "*barely opens one eye*"
+      "...mrrp?"
+      "*yawns heavily*"
+      "*rolls over toward you*"
+    ) ;;
   *)
     REACTIONS=(
       "*perks up*"

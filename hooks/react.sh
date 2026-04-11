@@ -17,11 +17,12 @@ CONFIG_FILE="$STATE_DIR/config.json"
 
 INPUT=$(cat)
 
-# Read cooldown from config (default 30s)
+# Read cooldown from config (default 30s, 0 = disabled)
 COOLDOWN=30
 if [ -f "$CONFIG_FILE" ]; then
   _cd=$(jq -r '.commentCooldown // 30' "$CONFIG_FILE" 2>/dev/null || echo 30)
-  [ "$_cd" -gt 0 ] 2>/dev/null && COOLDOWN=$_cd
+  # Accept any non-negative integer (including 0 to disable cooldown)
+  [[ "$_cd" =~ ^[0-9]+$ ]] && COOLDOWN=$_cd
 fi
 
 # Cooldown: configurable
@@ -94,6 +95,42 @@ pick_reaction() {
             POOLS=("*oozes with concern*" "*vibrates nervously*" "*turns slightly red*" "oh no oh no oh no") ;;
         blob:success)
             POOLS=("*jiggles happily*" "*gleams*" "yay!" "*bounces*") ;;
+        turtle:error)
+            POOLS=("*slow blink* bugs are fleeting" "*retreats slightly into shell*" "I've seen this before. many times." "patience. patience.") ;;
+        turtle:success)
+            POOLS=("*satisfied shell settle*" "as the ancients foretold." "*slow approving nod*" "good. very good.") ;;
+        goose:error)
+            POOLS=("HONK OF FURY." "*pecks the stack trace*" "*hisses at the bug*" "bad code. BAD.") ;;
+        goose:success)
+            POOLS=("*victorious honk*" "HONK OF APPROVAL." "*struts triumphantly*" "*wing spread of victory*") ;;
+        octopus:error)
+            POOLS=("*ink cloud of dismay*" "*all eight arms throw up*" "*turns deep red*" "the abyss of errors beckons.") ;;
+        octopus:success)
+            POOLS=("*turns gentle blue*" "*arms applaud in sync*" "excellent, from all angles." "*satisfied bubble*") ;;
+        penguin:error)
+            POOLS=("*adjusts glasses disapprovingly*" "this will not do." "*formal sigh*" "frightfully unfortunate.") ;;
+        penguin:success)
+            POOLS=("*polite applause*" "quite good, quite good." "*nods approvingly*" "splendid work, really.") ;;
+        snail:error)
+            POOLS=("*slow sigh*" "such is the nature of bugs." "*leaves slime trail of disappointment*" "patience, friend.") ;;
+        snail:success)
+            POOLS=("*slow satisfied nod*" "good things take time." "*leaves victory slime*" "see? no rush was needed.") ;;
+        cactus:error)
+            POOLS=("*spines bristle*" "you have trodden on a bug." "*grimaces stoically*" "hydrate and try again.") ;;
+        cactus:success)
+            POOLS=("*blooms briefly*" "survival confirmed." "*flowers in victory*" "*quiet bloom*") ;;
+        rabbit:error)
+            POOLS=("*nervous twitching*" "*hops backwards*" "oh no oh no oh no" "*freezes in panic*") ;;
+        rabbit:success)
+            POOLS=("*excited binky*" "*zoomies of joy*" "yay yay yay!" "*thumps in celebration*") ;;
+        mushroom:error)
+            POOLS=("*releases worried spores*" "the mycelium disagrees." "*cap droops*" "decompose. retry.") ;;
+        mushroom:success)
+            POOLS=("*spores of celebration*" "the mycelium approves." "*cap brightens*" "spore of pride.") ;;
+        chonk:error)
+            POOLS=("*doesn't move*" "too tired for this." "*grumbles*" "*rolls away from the error*") ;;
+        chonk:success)
+            POOLS=("*happy purr*" "*satisfied chonk noises*" "acceptable." "*sleeps even harder*") ;;
         *:error)
             POOLS=("*head tilts* ...that doesn't look right." "saw that one coming." "*slow blink* the stack trace told you everything." "*winces*") ;;
         *:test-fail)
