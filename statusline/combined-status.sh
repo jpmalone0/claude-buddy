@@ -52,3 +52,21 @@ try:
 except Exception:
     print('{}')
 " 2>/dev/null)
+
+# ── Capture buddy art (buddy reads state files, not stdin) ───────────────────
+BUDDY_OUTPUT=$("$BUDDY_SCRIPT" </dev/null 2>/dev/null)
+
+# No buddy output → exit silently (muted, no state, etc.)
+[ -z "$BUDDY_OUTPUT" ] && exit 0
+
+# No rate-limit data → pass buddy output through unchanged
+HAS_DATA=$(python3 -c "
+import json, sys
+d = json.loads('''$STATS_JSON''' or '{}')
+print(d.get('has_data', False))
+" 2>/dev/null)
+
+if [ "$HAS_DATA" != "True" ]; then
+    printf '%s\n' "$BUDDY_OUTPUT"
+    exit 0
+fi
