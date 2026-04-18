@@ -310,6 +310,8 @@ export interface BuddyConfig {
   bubblePosition: "top" | "left";
   showRarity: boolean;
   statusLineEnabled: boolean;
+  bubbleWidth: number;
+  bubbleMargin: number;
 }
 
 const DEFAULT_CONFIG: BuddyConfig = {
@@ -319,6 +321,8 @@ const DEFAULT_CONFIG: BuddyConfig = {
   bubblePosition: "top",
   showRarity: true,
   statusLineEnabled: false,
+  bubbleWidth: 28,
+  bubbleMargin: 8,
 };
 
 export function loadConfig(): BuddyConfig {
