@@ -241,10 +241,16 @@ if [ -n "$ACHIEVEMENT" ] && [ "$ACHIEVEMENT" != "null" ] && [ "$ACHIEVEMENT" != 
 fi
 REACTION_FILE="$BUDDY_STATE_DIR/reaction.$SID.json"
 REACTION_TTL=0
+INNER_W=28
+MARGIN=8
 CONFIG_FILE="$BUDDY_STATE_DIR/config.json"
 if [ -f "$CONFIG_FILE" ]; then
     _ttl=$(jq -r '.reactionTTL // 0' "$CONFIG_FILE" 2>/dev/null || echo 0)
     case "$_ttl" in ''|*[!0-9]*) ;; *) REACTION_TTL="$_ttl" ;; esac
+    _bw=$(jq -r '.bubbleWidth // 28' "$CONFIG_FILE" 2>/dev/null || echo 28)
+    case "$_bw" in ''|*[!0-9]*) ;; *) INNER_W="$_bw" ;; esac
+    _bm=$(jq -r '.bubbleMargin // 8' "$CONFIG_FILE" 2>/dev/null || echo 8)
+    case "$_bm" in ''|*[!0-9]*) ;; *) MARGIN="$_bm" ;; esac
 fi
 if [ -n "$REACTION" ] && [ "$REACTION" != "null" ] && [ "$REACTION" != "" ]; then
     FRESH=0
@@ -395,7 +401,6 @@ if [ $BUBBLE_COUNT -gt 0 ]; then
 else
     TOTAL_W=$ART_W
 fi
-MARGIN=8
 PAD=$(( COLS - TOTAL_W - MARGIN ))
 [ "$PAD" -lt 0 ] && PAD=0
 
