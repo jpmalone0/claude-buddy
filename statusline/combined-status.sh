@@ -110,7 +110,7 @@ except Exception:
 
 lines = sys.stdin.read().splitlines()
 n = len(lines)
-center = max(0, n // 2 - 1)
+center = 0
 
 stat_items = [
     fmt_stat('5h', stats.get('sess_pct'), stats.get('sess_reset', '--')),
@@ -126,7 +126,7 @@ for i, line in enumerate(lines):
         if num_spaces >= stat_width:
             remaining = ' ' * (num_spaces - stat_width)
             rest = after_braille.lstrip(' ')
-            print(stat_text + remaining + rest)
+            print(BRAILLE + stat_text + remaining + rest)
         else:
             print(line)
     else:
