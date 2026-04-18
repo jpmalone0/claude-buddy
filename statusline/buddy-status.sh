@@ -347,7 +347,6 @@ dwidth() {
 }
 
 # ─── Word-wrap bubble text ────────────────────────────────────────────────────
-INNER_W=44
 TEXT_LINES=()
 if [ -n "$BUBBLE_TEXT" ]; then
     WORDS=($BUBBLE_TEXT)
