@@ -257,6 +257,20 @@ case "$HAT" in
   tinyduck)  HAT_LINE="  ,>" ;;
 esac
 
+# ─── Wyvern: embed hat between horns on L0 instead of a separate line ────────
+if [ "$SPECIES" = "wyvern" ] && [ -n "$HAT_LINE" ]; then
+    case "$HAT" in
+        crown)     L0="} \^^^/ {" ;;
+        tophat)    L0="} [___] {" ;;
+        propeller) L0="}  -+-  {" ;;
+        halo)      L0="} (   ) {" ;;
+        wizard)    L0="}  /^\\  {" ;;
+        beanie)    L0="} (___) {" ;;
+        tinyduck)  L0="}  ,>   {" ;;
+    esac
+    HAT_LINE=""
+fi
+
 # ─── Reaction bubble (with TTL check) ────────────────────────────────────────
 BUBBLE=""
 if [ -n "$ACHIEVEMENT" ] && [ "$ACHIEVEMENT" != "null" ] && [ "$ACHIEVEMENT" != "" ]; then
