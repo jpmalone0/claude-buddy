@@ -110,7 +110,7 @@ except Exception:
 
 lines = sys.stdin.read().splitlines()
 n = len(lines)
-center = 0
+center = 1 
 
 stat_items = [
     fmt_stat('5h', stats.get('sess_pct'), stats.get('sess_reset', '--')),
