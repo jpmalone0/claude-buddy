@@ -302,7 +302,6 @@ if [ -n "$BUBBLE" ]; then
 fi
 
 # ─── Word-wrap bubble text ────────────────────────────────────────────────────
-INNER_W=28
 TEXT_LINES=()
 if [ -n "$BUBBLE_TEXT" ]; then
     WORDS=($BUBBLE_TEXT)
