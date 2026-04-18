@@ -20,8 +20,9 @@ import {
   loadCompanionSlot, saveCompanionSlot, slugify, unusedName, writeStatusState,
 } from "../server/state.ts";
 import {
-  generateBones, SPECIES, RARITIES, STAT_NAMES, RARITY_STARS,
-  type Species, type Rarity, type StatName, type BuddyBones, type Companion,
+  generateBones, SPECIES, RARITIES, STAT_NAMES, RARITY_STARS, EYES, HATS,
+  type Species, type Rarity, type StatName, type Eye, type Hat,
+  type BuddyBones, type Companion,
 } from "../server/engine.ts";
 import { renderCompanionCard } from "../server/art.ts";
 import { randomBytes } from "crypto";
@@ -79,17 +80,23 @@ function rpad(s: string, w: number): string {
 
 // ─── Option lists ─────────────────────────────────────────────────────────────
 
-const SP_OPTS = ["any", ...SPECIES]    as const;
-const RA_OPTS = ["any", ...RARITIES]   as const;
-const SH_OPTS = ["any", "yes", "no"]   as const;
-const ST_OPTS = ["any", ...STAT_NAMES] as const;
+const SP_OPTS  = ["any", ...SPECIES]    as const;
+const RA_OPTS  = ["any", ...RARITIES]   as const;
+const SH_OPTS  = ["any", "yes", "no"]   as const;
+const ST_OPTS  = ["any", ...STAT_NAMES] as const;
+const EY_OPTS  = ["any", ...EYES]       as const;
+const HA_OPTS  = ["any", ...HATS]       as const;
+const AVG_OPTS = ["any", "10", "20", "30", "40", "50", "60", "70", "80", "90"] as const;
 
 const CRITERIA_ROWS: Array<{ label: string; opts: readonly string[] }> = [
-  { label: "Species", opts: SP_OPTS },
-  { label: "Rarity ", opts: RA_OPTS },
-  { label: "Shiny  ", opts: SH_OPTS },
-  { label: "Peak   ", opts: ST_OPTS },
-  { label: "Dump   ", opts: ST_OPTS },
+  { label: "Species", opts: SP_OPTS  },
+  { label: "Rarity ", opts: RA_OPTS  },
+  { label: "Shiny  ", opts: SH_OPTS  },
+  { label: "Peak   ", opts: ST_OPTS  },
+  { label: "Dump   ", opts: ST_OPTS  },
+  { label: "Eye    ", opts: EY_OPTS  },
+  { label: "Hat    ", opts: HA_OPTS  },
+  { label: "Min avg", opts: AVG_OPTS },
 ];
 
 // ─── State ────────────────────────────────────────────────────────────────────
@@ -120,8 +127,8 @@ function fresh(): State {
     savedCursor:   0,
     activeSlot:    loadActiveSlot(),
     criteriaFocus: 0,
-    // Default criteria: legendary, any species
-    ci: [0, RA_OPTS.indexOf("legendary"), 0, 0, 0],
+    // Default criteria: legendary, any species/shiny/peak/dump/eye/hat/avg
+    ci: [0, RA_OPTS.indexOf("legendary"), 0, 0, 0, 0, 0, 0],
     results:       [],
     resultCursor:  0,
     searchStatus:  "",
@@ -300,13 +307,21 @@ function drawScreen(s: State): void {
 
 // ─── Search ───────────────────────────────────────────────────────────────────
 
+function avgStat(bones: BuddyBones): number {
+  const vals = Object.values(bones.stats) as number[];
+  return vals.reduce((a, b) => a + b, 0) / vals.length;
+}
+
 function runSearch(s: State): void {
-  const wantSp    = SP_OPTS[s.ci[0]] !== "any" ? SP_OPTS[s.ci[0]] as Species  : null;
-  const wantRa    = RA_OPTS[s.ci[1]] !== "any" ? RA_OPTS[s.ci[1]] as Rarity   : null;
-  const wantShiny = SH_OPTS[s.ci[2]] === "yes" ? true
-                  : SH_OPTS[s.ci[2]] === "no"  ? false : null;
-  const wantPeak  = ST_OPTS[s.ci[3]] !== "any" ? ST_OPTS[s.ci[3]] as StatName : null;
-  const wantDump  = ST_OPTS[s.ci[4]] !== "any" ? ST_OPTS[s.ci[4]] as StatName : null;
+  const wantSp    = SP_OPTS[s.ci[0]]  !== "any" ? SP_OPTS[s.ci[0]]  as Species  : null;
+  const wantRa    = RA_OPTS[s.ci[1]]  !== "any" ? RA_OPTS[s.ci[1]]  as Rarity   : null;
+  const wantShiny = SH_OPTS[s.ci[2]] === "yes"  ? true
+                  : SH_OPTS[s.ci[2]] === "no"   ? false : null;
+  const wantPeak  = ST_OPTS[s.ci[3]]  !== "any" ? ST_OPTS[s.ci[3]]  as StatName : null;
+  const wantDump  = ST_OPTS[s.ci[4]]  !== "any" ? ST_OPTS[s.ci[4]]  as StatName : null;
+  const wantEye   = EY_OPTS[s.ci[5]]  !== "any" ? EY_OPTS[s.ci[5]]  as Eye      : null;
+  const wantHat   = HA_OPTS[s.ci[6]]  !== "any" ? HA_OPTS[s.ci[6]]  as Hat      : null;
+  const minAvg    = AVG_OPTS[s.ci[7]] !== "any" ? Number(AVG_OPTS[s.ci[7]])      : null;
 
   // Scale attempt budget to rarity difficulty
   const maxAttempts =
@@ -333,6 +348,9 @@ function runSearch(s: State): void {
     if (wantShiny !== null && bones.shiny   !== wantShiny) continue;
     if (wantPeak  !== null && bones.peak    !== wantPeak)  continue;
     if (wantDump  !== null && bones.dump    !== wantDump)  continue;
+    if (wantEye   !== null && bones.eye     !== wantEye)   continue;
+    if (wantHat   !== null && bones.hat     !== wantHat)   continue;
+    if (minAvg    !== null && avgStat(bones) < minAvg)     continue;
 
     results.push({ userId, bones });
   }
