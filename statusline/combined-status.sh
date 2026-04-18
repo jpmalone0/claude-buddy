@@ -70,3 +70,65 @@ if [ "$HAS_DATA" != "True" ]; then
     printf '%s\n' "$BUDDY_OUTPUT"
     exit 0
 fi
+
+# ── Merge stat lines into buddy output ──────────────────────────────────────
+printf '%s\n' "$BUDDY_OUTPUT" | STATS_JSON="$STATS_JSON" python3 -c "
+import sys, json, os, re
+
+BRAILLE = '\u2800'
+GREEN   = '\033[32m'
+YELLOW  = '\033[33m'
+RED     = '\033[31m'
+DIM     = '\033[2m'
+NC      = '\033[0m'
+
+def color_for(pct):
+    if pct is None: return DIM
+    if pct < 30:   return GREEN
+    if pct < 70:   return YELLOW
+    return RED
+
+def build_bar(pct, width=10):
+    if pct is None:
+        return DIM + '░' * width + NC
+    c = color_for(pct)
+    filled = max(0, min(width, round(pct / 100 * width)))
+    return c + '█' * filled + NC + DIM + '░' * (width - filled) + NC
+
+def fmt_stat(label, pct, reset):
+    c = color_for(pct)
+    pct_str = f'{round(pct):3d}%' if pct is not None else '  -%'
+    bar = build_bar(pct)
+    text = f'{DIM}{label}{NC} {c}{pct_str}{NC} {bar} {c}↻{reset}{NC}'
+    visual_width = 2 + 1 + 4 + 1 + 10 + 1 + 1 + len(reset)
+    return text, visual_width
+
+try:
+    stats = json.loads(os.environ.get('STATS_JSON', '{}'))
+except Exception:
+    stats = {}
+
+lines = sys.stdin.read().splitlines()
+n = len(lines)
+center = max(0, n // 2 - 1)
+
+stat_items = [
+    fmt_stat('5h', stats.get('sess_pct'), stats.get('sess_reset', '--')),
+    fmt_stat('7d', stats.get('week_pct'), stats.get('week_reset', '--')),
+]
+
+for i, line in enumerate(lines):
+    si = i - center
+    if 0 <= si < 2 and line.startswith(BRAILLE):
+        stat_text, stat_width = stat_items[si]
+        after_braille = line[1:]
+        num_spaces = len(after_braille) - len(after_braille.lstrip(' '))
+        if num_spaces >= stat_width:
+            remaining = ' ' * (num_spaces - stat_width)
+            rest = after_braille.lstrip(' ')
+            print(stat_text + remaining + rest)
+        else:
+            print(line)
+    else:
+        print(line)
+"
