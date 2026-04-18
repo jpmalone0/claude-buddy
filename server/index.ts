@@ -13,6 +13,7 @@ import { join, resolve, dirname } from "path";
 
 import {
   generateBones,
+  generatePersonality,
   renderFace,
   SPECIES,
   RARITIES,
@@ -113,7 +114,7 @@ function ensureCompanion(): Companion {
   companion = {
     bones,
     name,
-    personality: `A ${bones.rarity} ${bones.species} who watches code with quiet intensity.`,
+    personality: generatePersonality(bones, userId),
     hatchedAt: Date.now(),
     userId,
   };
@@ -801,7 +802,7 @@ server.tool(
     const companion: Companion = {
       bones,
       name: buddyName,
-      personality: `A ${bones.rarity} ${bones.species} who watches code with quiet intensity.`,
+      personality: generatePersonality(bones, userId),
       hatchedAt: Date.now(),
       userId,
     };
