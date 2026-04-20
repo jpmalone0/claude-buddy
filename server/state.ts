@@ -312,6 +312,7 @@ export interface BuddyConfig {
   statusLineEnabled: boolean;
   bubbleWidth: number;
   bubbleMargin: number;
+  rainbowColors?: string[];
 }
 
 const DEFAULT_CONFIG: BuddyConfig = {
