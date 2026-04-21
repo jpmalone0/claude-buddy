@@ -13,7 +13,6 @@ import { join, resolve, dirname } from "path";
 
 import {
   generateBones,
-  generatePersonality,
   renderFace,
   SPECIES,
   RARITIES,
@@ -24,6 +23,7 @@ import {
   type StatName,
   type Companion,
 } from "./engine.ts";
+import { generateBuddy, generatePersonality, generateName } from "./generation.ts";
 import {
   loadCompanion,
   saveCompanion,
@@ -51,7 +51,7 @@ import {
   claudeSettingsPath,
 } from "./path.ts";
 import {
-  getReaction, generatePersonalityPrompt,
+  getReaction,
 } from "./reactions.ts";
 import { renderCompanionCardMarkdown } from "./art.ts";
 import {
@@ -94,7 +94,7 @@ const server = new McpServer(
 
 // ─── Helper: ensure companion exists ────────────────────────────────────────
 
-function ensureCompanion(): Companion {
+async function ensureCompanion(): Promise<Companion> {
   let companion = loadCompanion();
   if (companion) return companion;
 
@@ -110,11 +110,11 @@ function ensureCompanion(): Companion {
   // Menagerie is empty — generate a fresh companion in a new slot
   const userId = resolveUserId();
   const bones = generateBones(userId);
-  const name = unusedName();
+  const { name, personality } = await generateBuddy(bones);
   companion = {
     bones,
     name,
-    personality: generatePersonality(bones, userId),
+    personality,
     hatchedAt: Date.now(),
     userId,
   };
@@ -142,7 +142,7 @@ server.tool(
   "Show the coding companion with full ASCII art card, stats, and personality",
   {},
   async () => {
-    const companion = ensureCompanion();
+    const companion = await ensureCompanion();
     const reaction = loadReaction();
     const reactionText =
       reaction?.reaction ?? `*${companion.name} watches your code quietly*`;
@@ -173,7 +173,7 @@ server.tool(
   "Pet your coding companion — they react with happiness",
   {},
   async () => {
-    const companion = ensureCompanion();
+    const companion = await ensureCompanion();
     const reaction = getReaction(
       "pet",
       companion.bones.species,
@@ -203,7 +203,7 @@ server.tool(
   "Show detailed companion stats: species, rarity, all stats with bars",
   {},
   async () => {
-    const companion = ensureCompanion();
+    const companion = await ensureCompanion();
 
     // Stats-only card (no personality, no reaction — just the numbers).
     // Uses markdown renderer so the card displays cleanly in Claude Code's UI.
@@ -252,7 +252,7 @@ server.tool(
       .describe("What triggered the reaction"),
   },
   async ({ comment, reason }) => {
-    const companion = ensureCompanion();
+    const companion = await ensureCompanion();
     saveReaction(comment, reason ?? "turn");
     incrementEvent("reactions_given", 1, activeSlot());
 
@@ -285,7 +285,7 @@ server.tool(
       .describe("New name for your buddy (1-14 characters)"),
   },
   async ({ name }) => {
-    const companion = ensureCompanion();
+    const companion = await ensureCompanion();
     const oldName = companion.name;
     companion.name = name;
     saveCompanion(companion);
@@ -317,7 +317,7 @@ server.tool(
       .describe("Personality description (1-500 chars)"),
   },
   async ({ personality }) => {
-    const companion = ensureCompanion();
+    const companion = await ensureCompanion();
     companion.personality = personality;
     saveCompanion(companion);
     incrementEvent("commands_run", 1, activeSlot());
@@ -512,7 +512,7 @@ server.tool(
   "Mute buddy reactions (buddy stays visible but stops reacting)",
   {},
   async () => {
-    const companion = ensureCompanion();
+    const companion = await ensureCompanion();
     writeStatusState(companion, "", true);
     incrementEvent("commands_run", 1, activeSlot());
     incrementEvent("mutes", 1);
@@ -534,7 +534,7 @@ server.tool(
 );
 
 server.tool("buddy_unmute", "Unmute buddy reactions", {}, async () => {
-  const companion = ensureCompanion();
+  const companion = await ensureCompanion();
   writeStatusState(companion, "*stretches* I'm back!", false);
   saveReaction("*stretches* I'm back!", "pet");
   incrementEvent("commands_run", 1, activeSlot());
@@ -674,7 +674,7 @@ server.tool(
   "Show all achievement badges — earned and locked. Displays a card with progress bar and status for each badge.",
   {},
   async () => {
-    ensureCompanion();
+    await ensureCompanion();
     checkAndAward(activeSlot());
     incrementEvent("achievement_views", 1);
     const card = renderAchievementsCardMarkdown();
@@ -769,7 +769,7 @@ server.tool(
       ),
   },
   async ({ slot }) => {
-    const companion = ensureCompanion();
+    const companion = await ensureCompanion();
     const targetSlot = slot ? slugify(slot) : slugify(companion.name);
     saveCompanionSlot(companion, targetSlot);
     saveActiveSlot(targetSlot);
@@ -928,10 +928,11 @@ server.tool(
       };
     }
 
+    const personality = await generatePersonality(bones);
     const companion: Companion = {
       bones,
       name: buddyName,
-      personality: generatePersonality(bones, userId),
+      personality,
       hatchedAt: Date.now(),
       userId,
     };
@@ -951,6 +952,46 @@ server.tool(
   },
 );
 
+// ─── Tool: buddy_generate_personality ───────────────────────────────────────
+
+server.tool(
+  "buddy_generate_personality",
+  "Re-generate personality for the active companion via LLM. Updates stored personality and returns new text.",
+  {},
+  async () => {
+    const companion = await ensureCompanion();
+    const newPersonality = await generatePersonality(companion.bones);
+    if (newPersonality === "This creature doesn't want to tell you about itself right now.") {
+      return { content: [{ type: "text", text: "Generation failed — try again in a moment." }] };
+    }
+    companion.personality = newPersonality;
+    const slot = activeSlot();
+    saveCompanionSlot(companion, slot);
+    writeStatusState(companion);
+    return { content: [{ type: "text", text: newPersonality }] };
+  },
+);
+
+// ─── Tool: buddy_generate_name ───────────────────────────────────────────────
+
+server.tool(
+  "buddy_generate_name",
+  "Re-generate name for the active companion via LLM. Updates stored name and returns new name.",
+  {},
+  async () => {
+    const companion = await ensureCompanion();
+    const newName = await generateName(companion.bones, companion.personality);
+    if (newName === "TryAgainLater") {
+      return { content: [{ type: "text", text: "Generation failed — try again in a moment." }] };
+    }
+    companion.name = newName;
+    const slot = activeSlot();
+    saveCompanionSlot(companion, slot);
+    writeStatusState(companion);
+    return { content: [{ type: "text", text: newName }] };
+  },
+);
+
 // ─── Resource: buddy://companion ────────────────────────────────────────────
 
 server.resource(
@@ -958,7 +999,7 @@ server.resource(
   "buddy://companion",
   { description: "Current companion data as JSON", mimeType: "application/json" },
   async () => {
-    const companion = ensureCompanion();
+    const companion = await ensureCompanion();
     return {
       contents: [
         {
@@ -978,7 +1019,7 @@ server.resource(
   "buddy://prompt",
   { description: "System prompt context for the companion", mimeType: "text/markdown" },
   async () => {
-    const companion = ensureCompanion();
+    const companion = await ensureCompanion();
     const prompt = [
       "# Companion",
       "",
