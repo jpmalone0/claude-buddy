@@ -139,7 +139,7 @@ export function getReaction(
   return reaction;
 }
 
-// ─── Personality generation (fallback names when API unavailable) ────────────
+// ─── Fallback name generation ────────────────────────────────────────────────
 
 const FALLBACK_NAMES = [
   "Crumpet", "Soup", "Pickle", "Biscuit", "Moth", "Gravy",
@@ -147,41 +147,6 @@ const FALLBACK_NAMES = [
   "Thimble", "Marble", "Sesame", "Cobalt", "Rusty", "Nimbus",
 ];
 
-const VIBE_WORDS = [
-  "thunder", "biscuit", "void", "accordion", "moss", "velvet", "rust",
-  "pickle", "crumb", "whisper", "gravy", "frost", "ember", "soup",
-  "marble", "thorn", "honey", "static", "copper", "dusk", "sprocket",
-  "quartz", "soot", "plum", "flint", "oyster", "loom", "anvil",
-  "cork", "bloom", "pebble", "vapor", "mirth", "glint", "cider",
-];
-
 export function generateFallbackName(): string {
   return FALLBACK_NAMES[Math.floor(Math.random() * FALLBACK_NAMES.length)];
-}
-
-export function generatePersonalityPrompt(
-  species: Species,
-  rarity: Rarity,
-  stats: Record<string, number>,
-  shiny: boolean,
-): string {
-  const vibes: string[] = [];
-  for (let i = 0; i < 4; i++) {
-    vibes.push(VIBE_WORDS[Math.floor(Math.random() * VIBE_WORDS.length)]);
-  }
-
-  const statStr = Object.entries(stats).map(([k, v]) => `${k}:${v}`).join(", ");
-
-  return [
-    "Generate a coding companion — a small creature that lives in a developer's terminal.",
-    "Don't repeat yourself — every companion should feel distinct.",
-    "",
-    `Rarity: ${rarity.toUpperCase()}`,
-    `Species: ${species}`,
-    `Stats: ${statStr}`,
-    `Inspiration words: ${vibes.join(", ")}`,
-    shiny ? "SHINY variant — extra special." : "",
-    "",
-    "Return JSON: {\"name\": \"1-14 chars\", \"personality\": \"2-3 sentences describing behavior\"}",
-  ].filter(Boolean).join("\n");
 }

@@ -20,10 +20,11 @@ import {
   loadCompanionSlot, saveCompanionSlot, slugify, unusedName, writeStatusState,
 } from "../server/state.ts";
 import {
-  generateBones, generatePersonality, SPECIES, RARITIES, STAT_NAMES, RARITY_STARS, EYES, HATS,
+  generateBones, SPECIES, RARITIES, STAT_NAMES, RARITY_STARS, EYES, HATS,
   type Species, type Rarity, type StatName, type Eye, type Hat,
   type BuddyBones, type Companion,
 } from "../server/engine.ts";
+import { generatePersonality, generateName } from "../server/generation.ts";
 import { renderCompanionCard } from "../server/art.ts";
 import { randomBytes } from "crypto";
 
@@ -112,6 +113,8 @@ type Mode = "saved" | "criteria" | "searching" | "results" | "naming";
 interface SlotEntry   { slot: string; companion: Companion; }
 interface BuddyResult { userId: string; bones: BuddyBones; }
 
+type GenCache = { name: string; personality: string };
+
 interface State {
   mode:          Mode;
   searching:     boolean;
@@ -126,6 +129,9 @@ interface State {
   nameInput:     string;
   pendingResult: BuddyResult | null;
   message:       string;
+  genCache:      Map<string, GenCache>;
+  genPending:    Set<string>;
+  spinnerTick:   number;
 }
 
 function fresh(): State {
@@ -144,6 +150,9 @@ function fresh(): State {
     nameInput:     "",
     pendingResult: null,
     message:       "",
+    genCache:      new Map(),
+    genPending:    new Set(),
+    spinnerTick:   0,
   };
 }
 
@@ -253,27 +262,44 @@ function namingPane(s: State): string[] {
   return lines;
 }
 
+const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+
+function bonesKey(bones: BuddyBones): string {
+  return `${bones.species}:${bones.rarity}:${bones.shiny}:${bones.peak}:${bones.dump}:${Object.values(bones.stats).join(",")}`;
+}
+
 function previewPane(s: State): string[] {
   let c: Companion | null = null;
+  let loading = false;
 
   if (s.mode === "saved") {
     c = s.savedSlots[s.savedCursor]?.companion ?? null;
   } else if (s.mode === "results") {
     const r = s.results[s.resultCursor];
-    if (r) c = {
-      bones: r.bones, name: "???",
-      personality: generatePersonality(r.bones, r.userId),
-      hatchedAt: Date.now(), userId: r.userId,
-    };
+    if (r) {
+      const key = bonesKey(r.bones);
+      const cached = s.genCache.get(key);
+      if (cached) {
+        c = { bones: r.bones, name: cached.name, personality: cached.personality, hatchedAt: Date.now(), userId: r.userId };
+      } else {
+        loading = true;
+      }
+    }
   } else if (s.mode === "naming" && s.pendingResult) {
     const r = s.pendingResult;
-    c = {
-      bones: r.bones, name: s.nameInput || "???",
-      personality: generatePersonality(r.bones, r.userId),
-      hatchedAt: Date.now(), userId: r.userId,
-    };
+    const key = bonesKey(r.bones);
+    const cached = s.genCache.get(key);
+    if (cached) {
+      c = { bones: r.bones, name: s.nameInput || cached.name, personality: cached.personality, hatchedAt: Date.now(), userId: r.userId };
+    } else {
+      loading = true;
+    }
   }
 
+  if (loading) {
+    const frame = SPINNER_FRAMES[s.spinnerTick % SPINNER_FRAMES.length];
+    return [`  ${YL}${frame} generating...${N}`];
+  }
   if (!c) return [`  ${GR}no preview${N}`];
   // Calculate available width for the right pane (total cols - left pane - separator)
   const cols = Math.max(80, process.stdout.columns || 80);
@@ -333,7 +359,7 @@ function avgStat(bones: BuddyBones): number {
   return vals.reduce((a, b) => a + b, 0) / vals.length;
 }
 
-async function runSearch(s: State): Promise<void> {
+async function runSearch(s: State, onResults?: () => void): Promise<void> {
   const wantSp    = SP_OPTS[s.ci[0]]  !== "any" ? SP_OPTS[s.ci[0]]  as Species  : null;
   const wantRa    = RA_OPTS[s.ci[1]]  !== "any" ? RA_OPTS[s.ci[1]]  as Rarity   : null;
   const wantShiny = SH_OPTS[s.ci[2]] === "yes"  ? true
@@ -397,6 +423,31 @@ async function runSearch(s: State): Promise<void> {
   s.resultCursor = 0;
   s.mode         = "results";
   drawScreen(s);
+  onResults?.();
+}
+
+// ─── Generation prefetch ──────────────────────────────────────────────────────
+
+async function prefetchGeneration(r: BuddyResult, s: State, redraw: () => void): Promise<void> {
+  const key = bonesKey(r.bones);
+  if (s.genCache.has(key) || s.genPending.has(key)) return;
+  s.genPending.add(key);
+
+  // Animate spinner while waiting
+  const spinnerInterval = setInterval(() => {
+    s.spinnerTick++;
+    redraw();
+  }, 100);
+
+  try {
+    const personality = await generatePersonality(r.bones);
+    const name = await generateName(r.bones, personality);
+    s.genCache.set(key, { name, personality });
+  } finally {
+    s.genPending.delete(key);
+    clearInterval(spinnerInterval);
+    redraw();
+  }
 }
 
 // ─── Key handlers ─────────────────────────────────────────────────────────────
@@ -404,7 +455,7 @@ async function runSearch(s: State): Promise<void> {
 function clamp(v: number, lo: number, hi: number) { return Math.max(lo, Math.min(hi, v)); }
 
 /** Returns true if the TUI should exit. */
-function onKey(key: string, s: State): boolean {
+function onKey(key: string, s: State, maybePrefetch: () => void = () => {}): boolean {
   if (key === "\x03") return true;  // Ctrl+C always quits
 
   switch (s.mode) {
@@ -412,18 +463,20 @@ function onKey(key: string, s: State): boolean {
       if (key === "\x1b") {
         s.mode = "results"; s.nameInput = ""; s.pendingResult = null;
       } else if (key === "\r" || key === "\n") {
-        // Empty input → auto-pick a random unused name
-        const name = s.nameInput.trim() || unusedName();
+        const r = s.pendingResult!;
+        const key2 = bonesKey(r.bones);
+        const cached = s.genCache.get(key2);
+        // Use LLM name if no input typed; fall back to unusedName if still generating
+        const name = s.nameInput.trim() || cached?.name || unusedName();
         const slot = slugify(name);
         if (loadCompanionSlot(slot)) {
           s.message = `"${slot}" already taken — type a different name`;
           s.nameInput = "";
           break;
         }
-        const r    = s.pendingResult!;
         const companion: Companion = {
           bones: r.bones, name,
-          personality: generatePersonality(r.bones, r.userId),
+          personality: cached?.personality ?? "This creature doesn't want to tell you about itself right now.",
           hatchedAt: Date.now(), userId: r.userId,
         };
         saveCompanionSlot(companion, slot);
@@ -482,7 +535,7 @@ function onKey(key: string, s: State): boolean {
         s.searching    = true;
         s.searchStatus = "starting...";
         drawScreen(s);
-        runSearch(s);  // fire-and-forget async; updates state and redraws when done
+        runSearch(s, maybePrefetch);  // fire-and-forget async; updates state and redraws when done
       }
       break;
     }
@@ -536,10 +589,20 @@ async function main(): Promise<void> {
   const s = fresh();
   drawScreen(s);
 
+  function redraw() { drawScreen(s); }
+
+  function maybePrefetch() {
+    if (s.mode === "results" || s.mode === "naming") {
+      const r = s.mode === "results" ? s.results[s.resultCursor] : s.pendingResult;
+      if (r) prefetchGeneration(r, s, redraw);
+    }
+  }
+
   await new Promise<void>((resolve) => {
     process.stdin.on("data", (key: string) => {
-      const quit = onKey(key, s);
+      const quit = onKey(key, s, maybePrefetch);
       drawScreen(s);
+      maybePrefetch();
       if (quit) {
         cleanup();
         process.stdout.write("\x1b[2J\x1b[H");
