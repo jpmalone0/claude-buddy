@@ -33,18 +33,56 @@ async function queryClaude(prompt: string): Promise<string> {
   return stdout.trim();
 }
 
-export async function generatePersonality(bones: BuddyBones): Promise<string> {
+function bonesPromptBlock(bones: BuddyBones): string {
   const statLines = Object.entries(bones.stats)
     .map(([k, v]) => `${k}: ${v}`)
     .join(", ");
-
-  const prompt = [
+  return [
     `Species: ${bones.species}`,
     `Rarity: ${bones.rarity}`,
     `Shiny: ${bones.shiny}`,
     `Stats: ${statLines}`,
     `Peak stat: ${bones.peak} (${bones.stats[bones.peak]})`,
     `Dump stat: ${bones.dump} (${bones.stats[bones.dump]})`,
+  ].join("\n");
+}
+
+function sanitizeName(raw: string): string {
+  return raw.replace(/[^a-zA-Z0-9 '-]/g, "").slice(0, 14).trim();
+}
+
+export async function generateBuddy(
+  bones: BuddyBones,
+): Promise<{ name: string; personality: string }> {
+  const prompt = [
+    bonesPromptBlock(bones),
+    "",
+    "Generate both a NAME and PERSONALITY for this coding companion.",
+    "Be specific to this creature's stats and species — no generic filler.",
+    "Reply in exactly this format, with no preamble or extra lines:",
+    "NAME: <1-2 words, gender-neutral, evocative>",
+    "PERSONALITY: <3-4 sentences of trading-card / creature-compendium flavor text; stay fully in-world; describe behavior, quirks, and character>",
+  ].join("\n");
+
+  try {
+    const text = await queryClaude(prompt);
+    const nameMatch = text.match(/^\s*NAME:\s*(.+?)\s*$/mi);
+    const personalityMatch = text.match(/PERSONALITY:\s*([\s\S]+?)\s*$/i);
+    const name = sanitizeName(nameMatch?.[1] ?? "");
+    const personality = (personalityMatch?.[1] ?? "").trim();
+    if (!name || !personality) throw new Error("unparseable response");
+    return { name, personality };
+  } catch {
+    return {
+      name: "TryAgainLater",
+      personality: "This creature doesn't want to tell you about itself right now.",
+    };
+  }
+}
+
+export async function generatePersonality(bones: BuddyBones): Promise<string> {
+  const prompt = [
+    bonesPromptBlock(bones),
     "",
     "Write 3-4 sentences of trading-card / creature-compendium flavor text for this coding companion.",
     "Stay fully in-world — no meta-commentary. Describe behavior, quirks, and character.",
@@ -76,7 +114,7 @@ export async function generateName(
   try {
     const text = await queryClaude(prompt);
     if (!text) throw new Error("empty response");
-    return text.replace(/[^a-zA-Z0-9 '-]/g, "").slice(0, 14).trim() || "TryAgainLater";
+    return sanitizeName(text) || "TryAgainLater";
   } catch {
     return "TryAgainLater";
   }

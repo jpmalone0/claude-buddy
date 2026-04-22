@@ -23,7 +23,7 @@ import {
   type StatName,
   type Companion,
 } from "./engine.ts";
-import { generatePersonality, generateName } from "./generation.ts";
+import { generateBuddy, generatePersonality, generateName } from "./generation.ts";
 import {
   loadCompanion,
   saveCompanion,
@@ -110,8 +110,7 @@ async function ensureCompanion(): Promise<Companion> {
   // Menagerie is empty — generate a fresh companion in a new slot
   const userId = resolveUserId();
   const bones = generateBones(userId);
-  const personality = await generatePersonality(bones);
-  const name = await generateName(bones, personality);
+  const { name, personality } = await generateBuddy(bones);
   companion = {
     bones,
     name,

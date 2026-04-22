@@ -24,7 +24,7 @@ import {
   type Species, type Rarity, type StatName, type Eye, type Hat,
   type BuddyBones, type Companion,
 } from "../server/engine.ts";
-import { generatePersonality, generateName } from "../server/generation.ts";
+import { generateBuddy } from "../server/generation.ts";
 import { renderCompanionCard } from "../server/art.ts";
 import { randomBytes } from "crypto";
 
@@ -113,46 +113,44 @@ type Mode = "saved" | "criteria" | "searching" | "results" | "naming";
 interface SlotEntry   { slot: string; companion: Companion; }
 interface BuddyResult { userId: string; bones: BuddyBones; }
 
-type GenCache = { name: string; personality: string };
-
 interface State {
-  mode:          Mode;
-  searching:     boolean;
-  savedSlots:    SlotEntry[];
-  savedCursor:   number;
-  activeSlot:    string;
-  criteriaFocus: number;
-  ci:            number[];   // [speciesIdx, rarityIdx, shinyIdx, peakIdx, dumpIdx, eyeIdx, hatIdx, avgIdx, dbgIdx, patIdx, chaIdx, wisIdx, snkIdx]
-  results:       BuddyResult[];
-  resultCursor:  number;
-  searchStatus:  string;
-  nameInput:     string;
-  pendingResult: BuddyResult | null;
-  message:       string;
-  genCache:      Map<string, GenCache>;
-  genPending:    Set<string>;
-  spinnerTick:   number;
+  mode:              Mode;
+  searching:         boolean;
+  savedSlots:        SlotEntry[];
+  savedCursor:       number;
+  activeSlot:        string;
+  criteriaFocus:     number;
+  ci:                number[];   // [speciesIdx, rarityIdx, shinyIdx, peakIdx, dumpIdx, eyeIdx, hatIdx, avgIdx, dbgIdx, patIdx, chaIdx, wisIdx, snkIdx]
+  results:           BuddyResult[];
+  resultCursor:      number;
+  searchStatus:      string;
+  nameInput:         string;
+  pendingResult:     BuddyResult | null;
+  pendingGen:        { name: string; personality: string } | null;
+  pendingGenLoading: boolean;
+  message:           string;
+  spinnerTick:       number;
 }
 
 function fresh(): State {
   return {
-    mode:          "saved",
-    searching:     false,
-    savedSlots:    listCompanionSlots(),
-    savedCursor:   0,
-    activeSlot:    loadActiveSlot(),
-    criteriaFocus: 0,
+    mode:              "saved",
+    searching:         false,
+    savedSlots:        listCompanionSlots(),
+    savedCursor:       0,
+    activeSlot:        loadActiveSlot(),
+    criteriaFocus:     0,
     // Default criteria: legendary, any species/shiny/peak/dump/eye/hat/avg/stats
     ci: [0, RA_OPTS.indexOf("legendary"), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    results:       [],
-    resultCursor:  0,
-    searchStatus:  "",
-    nameInput:     "",
-    pendingResult: null,
-    message:       "",
-    genCache:      new Map(),
-    genPending:    new Set(),
-    spinnerTick:   0,
+    results:           [],
+    resultCursor:      0,
+    searchStatus:      "",
+    nameInput:         "",
+    pendingResult:     null,
+    pendingGen:        null,
+    pendingGenLoading: false,
+    message:           "",
+    spinnerTick:       0,
   };
 }
 
@@ -258,48 +256,34 @@ function namingPane(s: State): string[] {
   if (b) lines.push(`  ${clr}${b.rarity} ${b.species}${N}`);
   lines.push(GR + "  " + "─".repeat(LEFT_W - 2) + N);
   lines.push(`  ${B}Name:${N} ${s.nameInput}${YL}▌${N}`);
-  lines.push(`  ${GR}(type a name, or enter for random)${N}`);
+  if (s.pendingGenLoading) {
+    const frame = SPINNER_FRAMES[s.spinnerTick % SPINNER_FRAMES.length];
+    lines.push(`  ${GR}${frame} generating suggestion...${N}`);
+  } else {
+    lines.push(`  ${GR}(enter to save, or type a different name)${N}`);
+  }
   return lines;
 }
 
 const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 
-function bonesKey(bones: BuddyBones): string {
-  return `${bones.species}:${bones.rarity}:${bones.shiny}:${bones.peak}:${bones.dump}:${Object.values(bones.stats).join(",")}`;
-}
-
 function previewPane(s: State): string[] {
   let c: Companion | null = null;
-  let loading = false;
 
   if (s.mode === "saved") {
     c = s.savedSlots[s.savedCursor]?.companion ?? null;
   } else if (s.mode === "results") {
     const r = s.results[s.resultCursor];
     if (r) {
-      const key = bonesKey(r.bones);
-      const cached = s.genCache.get(key);
-      if (cached) {
-        c = { bones: r.bones, name: cached.name, personality: cached.personality, hatchedAt: Date.now(), userId: r.userId };
-      } else {
-        loading = true;
-      }
+      c = { bones: r.bones, name: "???", personality: "", hatchedAt: Date.now(), userId: r.userId };
     }
   } else if (s.mode === "naming" && s.pendingResult) {
     const r = s.pendingResult;
-    const key = bonesKey(r.bones);
-    const cached = s.genCache.get(key);
-    if (cached) {
-      c = { bones: r.bones, name: s.nameInput || cached.name, personality: cached.personality, hatchedAt: Date.now(), userId: r.userId };
-    } else {
-      loading = true;
-    }
+    const displayName = s.nameInput || s.pendingGen?.name || "???";
+    const displayPersonality = s.pendingGen?.personality ?? "";
+    c = { bones: r.bones, name: displayName, personality: displayPersonality, hatchedAt: Date.now(), userId: r.userId };
   }
 
-  if (loading) {
-    const frame = SPINNER_FRAMES[s.spinnerTick % SPINNER_FRAMES.length];
-    return [`  ${YL}${frame} generating...${N}`];
-  }
   if (!c) return [`  ${GR}no preview${N}`];
   // Calculate available width for the right pane (total cols - left pane - separator)
   const cols = Math.max(80, process.stdout.columns || 80);
@@ -359,7 +343,7 @@ function avgStat(bones: BuddyBones): number {
   return vals.reduce((a, b) => a + b, 0) / vals.length;
 }
 
-async function runSearch(s: State, onResults?: () => void): Promise<void> {
+async function runSearch(s: State): Promise<void> {
   const wantSp    = SP_OPTS[s.ci[0]]  !== "any" ? SP_OPTS[s.ci[0]]  as Species  : null;
   const wantRa    = RA_OPTS[s.ci[1]]  !== "any" ? RA_OPTS[s.ci[1]]  as Rarity   : null;
   const wantShiny = SH_OPTS[s.ci[2]] === "yes"  ? true
@@ -423,28 +407,25 @@ async function runSearch(s: State, onResults?: () => void): Promise<void> {
   s.resultCursor = 0;
   s.mode         = "results";
   drawScreen(s);
-  onResults?.();
 }
 
-// ─── Generation prefetch ──────────────────────────────────────────────────────
+// ─── Naming-mode generation ───────────────────────────────────────────────────
 
-async function prefetchGeneration(r: BuddyResult, s: State, redraw: () => void): Promise<void> {
-  const key = bonesKey(r.bones);
-  if (s.genCache.has(key) || s.genPending.has(key)) return;
-  s.genPending.add(key);
+async function startNamingGeneration(r: BuddyResult, s: State, redraw: () => void): Promise<void> {
+  if (s.pendingGenLoading || s.pendingGen) return;
+  s.pendingGenLoading = true;
 
-  // Animate spinner while waiting
   const spinnerInterval = setInterval(() => {
     s.spinnerTick++;
     redraw();
   }, 100);
 
   try {
-    const personality = await generatePersonality(r.bones);
-    const name = await generateName(r.bones, personality);
-    s.genCache.set(key, { name, personality });
+    const { name, personality } = await generateBuddy(r.bones);
+    s.pendingGen = { name, personality };
+    if (!s.nameInput) s.nameInput = name;  // auto-fill if user hasn't typed yet
   } finally {
-    s.genPending.delete(key);
+    s.pendingGenLoading = false;
     clearInterval(spinnerInterval);
     redraw();
   }
@@ -455,19 +436,18 @@ async function prefetchGeneration(r: BuddyResult, s: State, redraw: () => void):
 function clamp(v: number, lo: number, hi: number) { return Math.max(lo, Math.min(hi, v)); }
 
 /** Returns true if the TUI should exit. */
-function onKey(key: string, s: State, maybePrefetch: () => void = () => {}): boolean {
+function onKey(key: string, s: State): boolean {
   if (key === "\x03") return true;  // Ctrl+C always quits
 
   switch (s.mode) {
     case "naming": {
       if (key === "\x1b") {
         s.mode = "results"; s.nameInput = ""; s.pendingResult = null;
+        s.pendingGen = null; s.pendingGenLoading = false;
       } else if (key === "\r" || key === "\n") {
         const r = s.pendingResult!;
-        const key2 = bonesKey(r.bones);
-        const cached = s.genCache.get(key2);
-        // Use LLM name if no input typed; fall back to unusedName if still generating
-        const name = s.nameInput.trim() || cached?.name || unusedName();
+        // Use typed name, or LLM suggestion, or random fallback
+        const name = s.nameInput.trim() || s.pendingGen?.name || unusedName();
         const slot = slugify(name);
         if (loadCompanionSlot(slot)) {
           s.message = `"${slot}" already taken — type a different name`;
@@ -476,7 +456,7 @@ function onKey(key: string, s: State, maybePrefetch: () => void = () => {}): boo
         }
         const companion: Companion = {
           bones: r.bones, name,
-          personality: cached?.personality ?? "This creature doesn't want to tell you about itself right now.",
+          personality: s.pendingGen?.personality ?? "This creature doesn't want to tell you about itself right now.",
           hatchedAt: Date.now(), userId: r.userId,
         };
         saveCompanionSlot(companion, slot);
@@ -535,7 +515,7 @@ function onKey(key: string, s: State, maybePrefetch: () => void = () => {}): boo
         s.searching    = true;
         s.searchStatus = "starting...";
         drawScreen(s);
-        runSearch(s, maybePrefetch);  // fire-and-forget async; updates state and redraws when done
+        runSearch(s);  // fire-and-forget async; updates state and redraws when done
       }
       break;
     }
@@ -553,9 +533,11 @@ function onKey(key: string, s: State, maybePrefetch: () => void = () => {}): boo
       else if (key === "\r" || key === "\n") {
         const r = s.results[s.resultCursor];
         if (r) {
-          s.pendingResult = r;
-          s.nameInput    = "";  // empty — user types name or presses Enter for auto
-          s.mode         = "naming";
+          s.pendingResult     = r;
+          s.nameInput         = "";
+          s.pendingGen        = null;
+          s.pendingGenLoading = false;
+          s.mode              = "naming";
         }
       }
       break;
@@ -591,18 +573,15 @@ async function main(): Promise<void> {
 
   function redraw() { drawScreen(s); }
 
-  function maybePrefetch() {
-    if (s.mode === "results" || s.mode === "naming") {
-      const r = s.mode === "results" ? s.results[s.resultCursor] : s.pendingResult;
-      if (r) prefetchGeneration(r, s, redraw);
-    }
-  }
-
   await new Promise<void>((resolve) => {
     process.stdin.on("data", (key: string) => {
-      const quit = onKey(key, s, maybePrefetch);
+      const prevMode = s.mode;
+      const quit = onKey(key, s);
       drawScreen(s);
-      maybePrefetch();
+      // Fire generation when entering naming mode
+      if (s.mode === "naming" && prevMode !== "naming" && s.pendingResult) {
+        startNamingGeneration(s.pendingResult, s, redraw);
+      }
       if (quit) {
         cleanup();
         process.stdout.write("\x1b[2J\x1b[H");
