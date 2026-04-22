@@ -1,7 +1,37 @@
-import Anthropic from "@anthropic-ai/sdk";
 import type { BuddyBones } from "./engine.ts";
 
-const client = new Anthropic();
+const QUERY_SYSTEM_PROMPT =
+  "You write in-world flavor text for a creature-collecting game. " +
+  "Reply with ONLY the requested content — no preamble, no postamble, " +
+  "no meta-commentary, no markdown headers, no explanation.";
+
+async function queryClaude(prompt: string): Promise<string> {
+  // Strip ANTHROPIC_API_KEY so `claude` uses the Pro subscription auth
+  // rather than a (possibly depleted) API-key account.
+  const { ANTHROPIC_API_KEY, ...env } = process.env;
+
+  const proc = Bun.spawn(
+    [
+      "claude", "-p",
+      "--model", "haiku",
+      "--tools", "",
+      "--strict-mcp-config",
+      "--mcp-config", '{"mcpServers":{}}',
+      "--system-prompt", QUERY_SYSTEM_PROMPT,
+      prompt,
+    ],
+    { stdout: "pipe", stderr: "pipe", env },
+  );
+  const [stdout, stderr] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+  ]);
+  await proc.exited;
+  if (proc.exitCode !== 0) {
+    throw new Error(`claude CLI exited ${proc.exitCode}: ${stderr.trim() || stdout.trim()}`);
+  }
+  return stdout.trim();
+}
 
 export async function generatePersonality(bones: BuddyBones): Promise<string> {
   const statLines = Object.entries(bones.stats)
@@ -22,12 +52,7 @@ export async function generatePersonality(bones: BuddyBones): Promise<string> {
   ].join("\n");
 
   try {
-    const msg = await client.messages.create({
-      model: "claude-haiku-4-5-20251001",
-      max_tokens: 200,
-      messages: [{ role: "user", content: prompt }],
-    });
-    const text = msg.content[0].type === "text" ? msg.content[0].text.trim() : "";
+    const text = await queryClaude(prompt);
     if (!text) throw new Error("empty response");
     return text;
   } catch {
@@ -49,14 +74,8 @@ export async function generateName(
   ].join("\n");
 
   try {
-    const msg = await client.messages.create({
-      model: "claude-haiku-4-5-20251001",
-      max_tokens: 20,
-      messages: [{ role: "user", content: prompt }],
-    });
-    const text = msg.content[0].type === "text" ? msg.content[0].text.trim() : "";
+    const text = await queryClaude(prompt);
     if (!text) throw new Error("empty response");
-    // Strip any stray punctuation and truncate to 14 chars
     return text.replace(/[^a-zA-Z0-9 '-]/g, "").slice(0, 14).trim() || "TryAgainLater";
   } catch {
     return "TryAgainLater";
