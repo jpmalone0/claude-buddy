@@ -352,8 +352,9 @@ server.tool(
       "  /buddy style      Show or set bubble style (tmux only)",
       "  /buddy position   Show or set bubble position (tmux only)",
       "  /buddy rarity     Show or hide rarity stars (tmux only)",
-      "  /buddy width      Set bubble text width in chars (10-60, tmux only)",
-      "  /buddy margin     Set right-side margin in chars (0-20, tmux only)",
+      "  /buddy bubble_width  Set bubble text width in chars (10-60, tmux only)",
+      "  /buddy margin        Set right-side margin: distance from terminal right edge to buddy (0-20)",
+      "  /buddy bars_offset   Set left offset of usage bars from terminal left edge (0-40)",
       "  /buddy rainbow    Show or set shiny gradient colors (hex, e.g. #ff0000)",
       "  /buddy statusline Enable or disable buddy in the status line",
       "",
@@ -427,7 +428,7 @@ server.tool(
       .boolean()
       .optional()
       .describe("Show or hide the stars + rarity line in the status line"),
-    width: z
+    bubble_width: z
       .number()
       .int()
       .min(10)
@@ -440,7 +441,14 @@ server.tool(
       .min(0)
       .max(20)
       .optional()
-      .describe("Right-side margin between buddy and terminal edge (0–20, default 3)"),
+      .describe("Right-side margin: columns from terminal right edge to the buddy art (0–20, default 8)"),
+    bars_left_offset: z
+      .number()
+      .int()
+      .min(0)
+      .max(40)
+      .optional()
+      .describe("Columns from terminal left edge to the start of usage bars in combined mode (0–40, default 2)"),
     rainbow: z
       .array(z.string().regex(/^#[0-9a-fA-F]{6}$/, "Must be a hex color like #ff0000"))
       .min(1)
@@ -450,13 +458,14 @@ server.tool(
         "Custom rainbow gradient for shiny buddies — array of 1–16 hex colors (e.g. [\"#ff0000\",\"#00ff00\"]). Omit to reset to default ROYGBIV.",
       ),
   },
-  async ({ style, position, showRarity, width, margin, rainbow }) => {
+  async ({ style, position, showRarity, bubble_width, margin, bars_left_offset, rainbow }) => {
     if (
       style === undefined &&
       position === undefined &&
       showRarity === undefined &&
-      width === undefined &&
+      bubble_width === undefined &&
       margin === undefined &&
+      bars_left_offset === undefined &&
       rainbow === undefined
     ) {
       const cfg = loadConfig();
@@ -467,7 +476,7 @@ server.tool(
         content: [
           {
             type: "text",
-            text: `Bubble style: ${cfg.bubbleStyle}\nBubble position: ${cfg.bubblePosition}\nShow rarity: ${cfg.showRarity}\nBubble width: ${cfg.bubbleWidth}\nBubble margin: ${cfg.bubbleMargin}\nShiny rainbow: ${rainbowDisplay}\nUse /buddy style <classic|round>, /buddy position <top|left>, /buddy rarity <on|off>, /buddy width <10-60>, /buddy margin <0-20>, /buddy rainbow [<#hex>...] to change.`,
+            text: `Bubble style: ${cfg.bubbleStyle}\nBubble position: ${cfg.bubblePosition}\nShow rarity: ${cfg.showRarity}\nBubble width: ${cfg.bubbleWidth}\nBuddy margin (right): ${cfg.buddyMargin}\nBars left offset: ${cfg.barsLeftOffset}\nShiny rainbow: ${rainbowDisplay}\nUse /buddy style <classic|round>, /buddy position <top|left>, /buddy rarity <on|off>, /buddy bubble_width <10-60>, /buddy margin <0-20>, /buddy bars_offset <0-40>, /buddy rainbow [<#hex>...] to change.`,
           },
         ],
       };
@@ -476,8 +485,9 @@ server.tool(
     if (style !== undefined) updates.bubbleStyle = style;
     if (position !== undefined) updates.bubblePosition = position;
     if (showRarity !== undefined) updates.showRarity = showRarity;
-    if (width !== undefined) updates.bubbleWidth = width;
-    if (margin !== undefined) updates.bubbleMargin = margin;
+    if (bubble_width !== undefined) updates.bubbleWidth = bubble_width;
+    if (margin !== undefined) updates.buddyMargin = margin;
+    if (bars_left_offset !== undefined) updates.barsLeftOffset = bars_left_offset;
     if (rainbow !== undefined) updates.rainbowColors = rainbow.length > 0 ? rainbow : undefined;
     const cfg = saveConfig(updates);
     const rainbowDisplay = cfg.rainbowColors
@@ -487,7 +497,7 @@ server.tool(
       content: [
         {
           type: "text",
-          text: `Updated: style=${cfg.bubbleStyle}, position=${cfg.bubblePosition}, showRarity=${cfg.showRarity}, width=${cfg.bubbleWidth}, margin=${cfg.bubbleMargin}, rainbow=${rainbowDisplay}\nRestart Claude Code for changes to take effect.`,
+          text: `Updated: style=${cfg.bubbleStyle}, position=${cfg.bubblePosition}, showRarity=${cfg.showRarity}, width=${cfg.bubbleWidth}, margin=${cfg.buddyMargin}, barsLeftOffset=${cfg.barsLeftOffset}, rainbow=${rainbowDisplay}\nRestart Claude Code for changes to take effect.`,
         },
       ],
     };

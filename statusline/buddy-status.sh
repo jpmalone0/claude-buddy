@@ -68,6 +68,8 @@ case "$RARITY" in
 esac
 
 B=$'\xe2\xa0\x80'  # Braille Blank U+2800
+GOLD=$'\033[38;2;200;160;0m'
+RS=$'\x01'  # restore-line-color sentinel; replaced in render loop
 
 # ─── Rainbow colors for shiny buddies ────────────────────────────────────────
 # Default ROYGBIV palette; overridden by rainbowColors in config.json
@@ -280,7 +282,7 @@ fi
 # ─── Hat ──────────────────────────────────────────────────────────────────────
 HAT_LINE=""
 case "$HAT" in
-  crown)     HAT_LINE=" \\^^^/" ;;
+  crown)     HAT_LINE=" ${GOLD}\\^^^/${RS}" ;;
   tophat)    HAT_LINE=" [___]" ;;
   propeller) HAT_LINE="  -+-" ;;
   halo)      HAT_LINE=" (   )" ;;
@@ -292,7 +294,7 @@ esac
 # ─── Wyvern: embed hat between horns on L0 instead of a separate line ────────
 if [ "$SPECIES" = "wyvern" ] && [ -n "$HAT_LINE" ]; then
     case "$HAT" in
-        crown)     L0="} \^^^/ {" ;;
+        crown)     L0="} ${GOLD}\\^^^/${RS} {" ;;
         tophat)    L0="} [___] {" ;;
         propeller) L0="}  -+-  {" ;;
         halo)      L0="} (   ) {" ;;
@@ -317,7 +319,7 @@ if [ -f "$CONFIG_FILE" ]; then
     case "$_ttl" in ''|*[!0-9]*) ;; *) REACTION_TTL="$_ttl" ;; esac
     _bw=$(jq -r '.bubbleWidth // 44' "$CONFIG_FILE" 2>/dev/null || echo 44)
     case "$_bw" in ''|*[!0-9]*) ;; *) INNER_W="$_bw" ;; esac
-    _bm=$(jq -r '.bubbleMargin // 8' "$CONFIG_FILE" 2>/dev/null || echo 8)
+    _bm=$(jq -r '.buddyMargin // .bubbleMargin // 8' "$CONFIG_FILE" 2>/dev/null || echo 8)
     case "$_bm" in ''|*[!0-9]*) ;; *) MARGIN="$_bm" ;; esac
 fi
 if [ -n "$REACTION" ] && [ "$REACTION" != "null" ] && [ "$REACTION" != "" ]; then
@@ -487,9 +489,10 @@ fi
 BUBBLE_COUNT=${#BUBBLE_LINES[@]}
 
 # ─── Right-align with bubble box to the left ─────────────────────────────────
-GAP=2
+# Connector between bubble and art is always 3 chars ("-- " or "   ")
+CONNECTOR_W=3
 if [ $BUBBLE_COUNT -gt 0 ]; then
-    TOTAL_W=$(( BOX_W + GAP + ART_W ))
+    TOTAL_W=$(( BOX_W + CONNECTOR_W + ART_W ))
 else
     TOTAL_W=$ART_W
 fi
@@ -502,8 +505,6 @@ case "$(uname -s)" in
     MINGW*|CYGWIN*|MSYS*) SPACER=$(printf '%*s' "$PAD" '') ;;
     *)                     SPACER=$(printf "${B}%${PAD}s" "") ;;
 esac
-GAP_STR=$(printf '%*s' "$GAP" '')
-
 # Vertically center bubble box on the art
 BUBBLE_START=0
 if [ $BUBBLE_COUNT -gt 0 ] && [ $BUBBLE_COUNT -lt $ART_COUNT ]; then
@@ -526,7 +527,9 @@ MAX_LINES=$(( ART_COUNT > TOTAL_BUBBLE ? ART_COUNT : TOTAL_BUBBLE ))
 for (( i=0; i<MAX_LINES; i++ )); do
     # Art part: actual art line or blank filler
     if [ $i -lt $ART_COUNT ]; then
-        art_part="${ALL_COLORS[$i]}${ALL_LINES[$i]}${NC}"
+        line_color="${ALL_COLORS[$i]}"
+        art_line="${ALL_LINES[$i]//$'\x01'/$line_color}"
+        art_part="${line_color}${art_line}${NC}"
     else
         art_part=$(printf '%*s' "$ART_W" '')
     fi

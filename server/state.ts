@@ -311,7 +311,8 @@ export interface BuddyConfig {
   showRarity: boolean;
   statusLineEnabled: boolean;
   bubbleWidth: number;
-  bubbleMargin: number;
+  buddyMargin: number;
+  barsLeftOffset: number;
   useCombinedStatus: boolean;
   rainbowColors?: string[];
 }
@@ -324,7 +325,8 @@ const DEFAULT_CONFIG: BuddyConfig = {
   showRarity: true,
   statusLineEnabled: false,
   bubbleWidth: 28,
-  bubbleMargin: 8,
+  buddyMargin: 8,
+  barsLeftOffset: 2,
   useCombinedStatus: false,
 };
 
