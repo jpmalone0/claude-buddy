@@ -275,9 +275,7 @@ function previewPane(s: State): string[] {
   }
 
   if (!c) return [`  ${GR}no preview${N}`];
-  // Calculate available width for the right pane (total cols - left pane - separator)
-  const cols = Math.max(80, process.stdout.columns || 80);
-  const rightW = cols - LEFT_W - 3;
+  const rightW = 34;
   return renderCompanionCard(c.bones, c.name, c.personality, undefined, 0, rightW).split("\n");
 }
 
