@@ -16,8 +16,12 @@ import {
   renderFace,
   SPECIES,
   RARITIES,
+  EYES,
+  HATS,
   STAT_NAMES,
   RARITY_STARS,
+  type Eye,
+  type Hat,
   type Species,
   type Rarity,
   type StatName,
@@ -907,11 +911,17 @@ server.tool(
     rarity: z.enum(RARITIES).optional().describe(
       "Desired rarity (e.g. 'legendary', 'epic', 'rare'). If omitted, any rarity. Higher rarities need more attempts and may take a moment.",
     ),
+    eye: z.enum(EYES).optional().describe(
+      `Eye glyph. Options: ${EYES.join(", ")}. Defaults to ${EYES[0]}.`,
+    ),
+    hat: z.enum(HATS).optional().describe(
+      `Hat style. Options: ${HATS.join(", ")}. Defaults to none.`,
+    ),
     name: z.string().min(1).max(14).optional().describe(
       "Name for the new buddy (1-14 chars). If omitted, a random name is chosen.",
     ),
   },
-  async ({ species, rarity, name }) => {
+  async ({ species, rarity, eye, hat, name }) => {
     const { randomBytes } = await import("crypto");
 
     const maxAttempts =
@@ -924,7 +934,7 @@ server.tool(
 
     for (let i = 0; i < maxAttempts; i++) {
       userId = randomBytes(16).toString("hex");
-      const candidate = generateBones(userId);
+      const candidate = generateBones(userId, undefined, eye, hat);
       if (species && candidate.species !== species) continue;
       if (rarity && candidate.rarity !== rarity) continue;
       bones = candidate;
