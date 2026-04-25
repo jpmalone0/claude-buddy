@@ -67,6 +67,16 @@ case "$RARITY" in
   *)         C=$'\033[0m' ;;
 esac
 
+# ─── Rarity hex (used as hat shimmer base for non-crown hats) ────────────────
+case "$RARITY" in
+  common)    RARITY_HEX="999999" ;;
+  uncommon)  RARITY_HEX="4EBA65" ;;
+  rare)      RARITY_HEX="B1B9F9" ;;
+  epic)      RARITY_HEX="AF87FF" ;;
+  legendary) RARITY_HEX="FFC107" ;;
+  *)         RARITY_HEX="999999" ;;
+esac
+
 B=$'\xe2\xa0\x80'  # Braille Blank U+2800
 GOLD=$'\033[38;2;200;160;0m'
 RS=$'\x01'  # restore-line-color sentinel; replaced in render loop
@@ -76,6 +86,20 @@ RS=$'\x01'  # restore-line-color sentinel; replaced in render loop
 _hex_to_ansi() {
     local hex="${1#\#}"
     printf '\033[38;2;%d;%d;%dm' "$(( 16#${hex:0:2} ))" "$(( 16#${hex:2:2} ))" "$(( 16#${hex:4:2} ))"
+}
+
+# Compute hat shimmer: apply rainbow delta (relative to first rainbow color) to
+# the hat's base hex color, clamping each channel to [0, 255].
+_hat_shimmer_ansi() {
+    local hex="${1#\#}" idx="$2"
+    local br=$(( 16#${hex:0:2} )) bg=$(( 16#${hex:2:2} )) bb=$(( 16#${hex:4:2} ))
+    local nr=$(( br + RAINBOW_R[idx] - RAINBOW_R[0] ))
+    local ng=$(( bg + RAINBOW_G[idx] - RAINBOW_G[0] ))
+    local nb=$(( bb + RAINBOW_B[idx] - RAINBOW_B[0] ))
+    [ $nr -lt 0 ] && nr=0; [ $nr -gt 255 ] && nr=255
+    [ $ng -lt 0 ] && ng=0; [ $ng -gt 255 ] && ng=255
+    [ $nb -lt 0 ] && nb=0; [ $nb -gt 255 ] && nb=255
+    printf '\033[38;2;%d;%d;%dm' "$nr" "$ng" "$nb"
 }
 
 RAINBOW=(
@@ -88,12 +112,25 @@ RAINBOW=(
   $'\033[38;2;180;50;220m'
 )
 
+# Parallel RGB component arrays — used by _hat_shimmer_ansi for delta math.
+# Must stay in sync with RAINBOW above (and custom overrides below).
+RAINBOW_R=(255 255 255  50  50 100 180)
+RAINBOW_G=( 50 140 220 210 120  50  50)
+RAINBOW_B=( 50   0   0  50 255 220 220)
+
 if [ -f "$CONFIG_FILE" ]; then
     _custom=$(jq -r '(.rainbowColors // []) | @tsv' "$CONFIG_FILE" 2>/dev/null)
     if [ -n "$_custom" ]; then
         RAINBOW=()
+        RAINBOW_R=()
+        RAINBOW_G=()
+        RAINBOW_B=()
         for _hex in $_custom; do
             RAINBOW+=("$(_hex_to_ansi "$_hex")")
+            _h="${_hex#\#}"
+            RAINBOW_R+=("$(( 16#${_h:0:2} ))")
+            RAINBOW_G+=("$(( 16#${_h:2:2} ))")
+            RAINBOW_B+=("$(( 16#${_h:4:2} ))")
         done
     fi
 fi
@@ -279,10 +316,31 @@ if [ "$BLINK" -eq 1 ]; then
     L5="${L5//${E}/-}"
 fi
 
+# ─── Hat shimmer (shiny buddies only) ────────────────────────────────────────
+# Each hat type declares its base hex here — that's the only place to update
+# when adding/changing hat colors. For hats without their own color, RARITY_HEX
+# is the fallback so the shimmer stays tied to the buddy's rarity tone.
+CROWN_HAT_COLOR="${GOLD}"
+HAT_COLOR=""
+if [ "$SHINY" = "true" ] && [ "$HAT" != "none" ]; then
+    case "$HAT" in
+      crown) _hat_hex="C8A000" ;;  # gold
+      *)     _hat_hex="$RARITY_HEX" ;;
+    esac
+    # Non-wyvern: hat is a separate line at arc=1 (first body line is also arc=1)
+    # Wyvern: crown is embedded in L0 at arc=0 — must stay in phase with L0's color
+    HAT_COLOR="$(_hat_shimmer_ansi "$_hat_hex" "$(( (RAINBOW_OFFSET + 1) % RAINBOW_LEN ))")"
+    if [ "$SPECIES" = "wyvern" ]; then
+        CROWN_HAT_COLOR="$(_hat_shimmer_ansi "$_hat_hex" "$RAINBOW_OFFSET")"
+    else
+        CROWN_HAT_COLOR="${HAT_COLOR}"
+    fi
+fi
+
 # ─── Hat ──────────────────────────────────────────────────────────────────────
 HAT_LINE=""
 case "$HAT" in
-  crown)     HAT_LINE=" ${GOLD}\\^^^/${RS}" ;;
+  crown)     HAT_LINE=" ${CROWN_HAT_COLOR}\\^^^/${RS}" ;;
   tophat)    HAT_LINE=" [___]" ;;
   propeller) HAT_LINE="  -+-" ;;
   halo)      HAT_LINE=" (   )" ;;
@@ -294,7 +352,7 @@ esac
 # ─── Wyvern: embed hat between horns on L0 instead of a separate line ────────
 if [ "$SPECIES" = "wyvern" ] && [ -n "$HAT_LINE" ]; then
     case "$HAT" in
-        crown)     L0="} ${GOLD}\\^^^/${RS} {" ;;
+        crown)     L0="} ${CROWN_HAT_COLOR}\\^^^/${RS} {" ;;
         tophat)    L0="} [___] {" ;;
         propeller) L0="}  -+-  {" ;;
         halo)      L0="} (   ) {" ;;
@@ -367,7 +425,7 @@ _arc=0
 if [ -n "$HAT_LINE" ]; then
     ALL_LINES+=("$HAT_LINE")
     if [ "$SHINY" = "true" ]; then
-        ALL_COLORS+=("${RAINBOW[$(( (_arc + RAINBOW_OFFSET) % RAINBOW_LEN ))]}")
+        ALL_COLORS+=("${HAT_COLOR}")
     else
         ALL_COLORS+=("$C")
     fi

@@ -269,13 +269,16 @@ function rollRarity(rng: () => number): Rarity {
   return "common";
 }
 
-export function generateBones(userId: string, salt: string = SALT): BuddyBones {
+export function generateBones(
+  userId: string,
+  salt: string = SALT,
+  eye: Eye = EYES[0],
+  hat: Hat = "none",
+): BuddyBones {
   const rng = mulberry32(hashString(userId + salt));
 
   const rarity = rollRarity(rng);
   const species = pick(rng, SPECIES);
-  const eye = pick(rng, EYES);
-  const hat = rarity === "common" ? "none" : pick(rng, HATS);
   const shiny = rng() < 0.01;
 
   const peak = pick(rng, STAT_NAMES);
@@ -405,8 +408,6 @@ export function searchBuddy(
     const species = pick(rng, SPECIES);
     if (species !== criteria.species) continue;
 
-    const eye = pick(rng, EYES);
-    const hat = rarity === "common" ? "none" : pick(rng, HATS);
     const shiny = rng() < 0.01;
     if (criteria.wantShiny && !shiny) continue;
 
@@ -440,7 +441,7 @@ export function searchBuddy(
 
     results.push({
       userId: id,
-      bones: { rarity, species, eye, hat, shiny, stats, peak, dump },
+      bones: { rarity, species, eye: EYES[0], hat: "none", shiny, stats, peak, dump },
     });
 
     if (results.length >= 20) break;

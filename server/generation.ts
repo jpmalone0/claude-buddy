@@ -61,7 +61,7 @@ export async function generateBuddy(
     "Be specific to this creature's stats and species — no generic filler.",
     "Reply in exactly this format, with no preamble or extra lines:",
     "NAME: <1-2 words, gender-neutral, evocative>",
-    "PERSONALITY: <3-4 sentences of trading-card / creature-compendium flavor text; stay fully in-world; describe behavior, quirks, and character>",
+    "PERSONALITY: <2 sentences max; plain and dry, like a field guide entry; no metaphors, no dramatic adjectives; just what this creature does and how it acts>",
   ].join("\n");
 
   try {
@@ -84,9 +84,9 @@ export async function generatePersonality(bones: BuddyBones): Promise<string> {
   const prompt = [
     bonesPromptBlock(bones),
     "",
-    "Write 3-4 sentences of trading-card / creature-compendium flavor text for this coding companion.",
-    "Stay fully in-world — no meta-commentary. Describe behavior, quirks, and character.",
-    "Be specific to this creature's stats and species. Do not use generic filler.",
+    "Write 2 sentences max describing this coding companion. Plain and dry — like a field guide entry, not a fantasy novel.",
+    "No metaphors, no dramatic adjectives, no poetic language. Just what it does and how it behaves.",
+    "Be specific to the stats and species.",
   ].join("\n");
 
   try {
