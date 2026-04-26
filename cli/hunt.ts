@@ -181,7 +181,7 @@ ${CYAN}╚═══════════════════════�
     personality = personalityRaw.trim();
   } else {
     console.log(`\n${DIM}  Generating personality...${NC}`);
-    personality = await generatePersonality(chosen.bones);
+    personality = await generatePersonality(chosen.bones, chosen.userId);
   }
 
   const slot = slugify(chosenName);

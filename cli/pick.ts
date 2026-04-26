@@ -506,13 +506,13 @@ async function confirmConfiguring(
 
   try {
     if (!name && !personality) {
-      const gen = await generateBuddy(bones);
+      const gen = await generateBuddy(bones, r.userId);
       name        = gen.name;
       personality = gen.personality;
     } else if (!name) {
-      name = await generateName(bones, personality);
+      name = await generateName(bones, personality, r.userId);
     } else if (!personality) {
-      personality = await generatePersonality(bones);
+      personality = await generatePersonality(bones, r.userId);
     }
   } finally {
     clearInterval(spinnerInterval);

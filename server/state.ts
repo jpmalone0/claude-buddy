@@ -315,6 +315,7 @@ export interface BuddyConfig {
   barsLeftOffset: number;
   useCombinedStatus: boolean;
   rainbowColors?: string[];
+  llmGeneration: boolean;
 }
 
 const DEFAULT_CONFIG: BuddyConfig = {
@@ -328,6 +329,7 @@ const DEFAULT_CONFIG: BuddyConfig = {
   buddyMargin: 8,
   barsLeftOffset: 2,
   useCombinedStatus: false,
+  llmGeneration: true,
 };
 
 export function loadConfig(): BuddyConfig {

@@ -114,7 +114,7 @@ async function ensureCompanion(): Promise<Companion> {
   // Menagerie is empty — generate a fresh companion in a new slot
   const userId = resolveUserId();
   const bones = generateBones(userId);
-  const { name, personality } = await generateBuddy(bones);
+  const { name, personality } = await generateBuddy(bones, userId);
   companion = {
     bones,
     name,
@@ -460,8 +460,14 @@ server.tool(
       .describe(
         "Custom rainbow gradient for shiny buddies — array of 1–16 hex colors (e.g. [\"#ff0000\",\"#00ff00\"]). Omit to reset to default ROYGBIV.",
       ),
+    llm_generation: z
+      .boolean()
+      .optional()
+      .describe(
+        "Enable or disable LLM-based personality and name generation (default on). When off, uses fast deterministic template generation instead.",
+      ),
   },
-  async ({ style, position, showRarity, bubble_width, margin, bars_left_offset, rainbow }) => {
+  async ({ style, position, showRarity, bubble_width, margin, bars_left_offset, rainbow, llm_generation }) => {
     if (
       style === undefined &&
       position === undefined &&
@@ -469,7 +475,8 @@ server.tool(
       bubble_width === undefined &&
       margin === undefined &&
       bars_left_offset === undefined &&
-      rainbow === undefined
+      rainbow === undefined &&
+      llm_generation === undefined
     ) {
       const cfg = loadConfig();
       const rainbowDisplay = cfg.rainbowColors
@@ -479,7 +486,7 @@ server.tool(
         content: [
           {
             type: "text",
-            text: `Bubble style: ${cfg.bubbleStyle}\nBubble position: ${cfg.bubblePosition}\nShow rarity: ${cfg.showRarity}\nBubble width: ${cfg.bubbleWidth}\nBuddy margin (right): ${cfg.buddyMargin}\nBars left offset: ${cfg.barsLeftOffset}\nShiny rainbow: ${rainbowDisplay}\nUse /buddy style <classic|round>, /buddy position <top|left>, /buddy rarity <on|off>, /buddy bubble_width <10-60>, /buddy margin <0-20>, /buddy bars_offset <0-40>, /buddy rainbow [<#hex>...] to change.`,
+            text: `Bubble style: ${cfg.bubbleStyle}\nBubble position: ${cfg.bubblePosition}\nShow rarity: ${cfg.showRarity}\nBubble width: ${cfg.bubbleWidth}\nBuddy margin (right): ${cfg.buddyMargin}\nBars left offset: ${cfg.barsLeftOffset}\nShiny rainbow: ${rainbowDisplay}\nLLM generation: ${cfg.llmGeneration}\nUse /buddy style <classic|round>, /buddy position <top|left>, /buddy rarity <on|off>, /buddy bubble_width <10-60>, /buddy margin <0-20>, /buddy bars_offset <0-40>, /buddy rainbow [<#hex>...], /buddy llm_generation <on|off> to change.`,
           },
         ],
       };
@@ -492,6 +499,7 @@ server.tool(
     if (margin !== undefined) updates.buddyMargin = margin;
     if (bars_left_offset !== undefined) updates.barsLeftOffset = bars_left_offset;
     if (rainbow !== undefined) updates.rainbowColors = rainbow.length > 0 ? rainbow : undefined;
+    if (llm_generation !== undefined) updates.llmGeneration = llm_generation;
     const cfg = saveConfig(updates);
     const rainbowDisplay = cfg.rainbowColors
       ? cfg.rainbowColors.join(", ")
@@ -500,7 +508,7 @@ server.tool(
       content: [
         {
           type: "text",
-          text: `Updated: style=${cfg.bubbleStyle}, position=${cfg.bubblePosition}, showRarity=${cfg.showRarity}, width=${cfg.bubbleWidth}, margin=${cfg.buddyMargin}, barsLeftOffset=${cfg.barsLeftOffset}, rainbow=${rainbowDisplay}\nRestart Claude Code for changes to take effect.`,
+          text: `Updated: style=${cfg.bubbleStyle}, position=${cfg.bubblePosition}, showRarity=${cfg.showRarity}, width=${cfg.bubbleWidth}, margin=${cfg.buddyMargin}, barsLeftOffset=${cfg.barsLeftOffset}, rainbow=${rainbowDisplay}, llmGeneration=${cfg.llmGeneration}\nRestart Claude Code for changes to take effect.`,
         },
       ],
     };
@@ -934,7 +942,7 @@ server.tool(
       };
     }
 
-    const personality = await generatePersonality(bones);
+    const personality = await generatePersonality(bones, userId);
     const companion: Companion = {
       bones,
       name: buddyName,
