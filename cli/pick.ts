@@ -421,7 +421,7 @@ async function startNamingGeneration(r: BuddyResult, s: State, redraw: () => voi
   }, 100);
 
   try {
-    const { name, personality } = await generateBuddy(r.bones);
+    const { name, personality } = await generateBuddy(r.bones, r.userId);
     s.pendingGen = { name, personality };
     if (!s.nameInput) s.nameInput = name;  // auto-fill if user hasn't typed yet
   } finally {
